@@ -3901,9 +3901,6 @@ enum {
 #define PFN_PARTIAL_SCAN_BIT		0
 #define PFN_PARTIAL_SCAN_MASK		1
 
-#define PFN_PARTIAL_SCAN_BIT		0
-#define PFN_PARTIAL_SCAN_MASK		1
-
 /* PFN network info structure */
 typedef struct wl_pfn_subnet_info {
 	struct ether_addr BSSID;
