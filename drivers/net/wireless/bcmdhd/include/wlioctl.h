@@ -3888,18 +3888,18 @@ enum {
 
 #define PFN_VERSION		2
 #define PFN_SCANRESULT_VERSION	1
-#define PFN_LSCANRESULT_VERSION 2
 #define MAX_PFN_LIST_COUNT	16
 
 #define PFN_COMPLETE			1
 #define PFN_INCOMPLETE			0
-#define PFN_OUTOFMEMORY			2
 
 #define DEFAULT_BESTN			2
 #define DEFAULT_MSCAN			0
 #define DEFAULT_REPEAT			10
-#define DEFAULT_EXP				2
-#define DEFAULT_RTTN			0
+#define DEFAULT_EXP			2
+
+#define PFN_PARTIAL_SCAN_BIT		0
+#define PFN_PARTIAL_SCAN_MASK		1
 
 #define PFN_PARTIAL_SCAN_BIT		0
 #define PFN_PARTIAL_SCAN_MASK		1
@@ -3962,7 +3962,6 @@ typedef struct wl_pfn_param {
 					*/
 	uint8 exp;			/* Exponent of 2 for maximum scan interval */
 	int32 slow_freq;		/* slow scan period */
-	uint8	rttn;
 } wl_pfn_param_t;
 
 typedef struct wl_pfn_bssid {
