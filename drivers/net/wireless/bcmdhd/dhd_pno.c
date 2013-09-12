@@ -1861,14 +1861,18 @@ int dhd_pno_deinit(dhd_pub_t *dhd)
 	dhd_pno_status_info_t *_pno_state;
 	dhd_pno_params_t *_params;
 	NULL_CHECK(dhd, "dhd is NULL", err);
-
 	DHD_PNO(("%s enter\n", __FUNCTION__));
 	_pno_state = PNO_GET_PNOSTATE(dhd);
 	NULL_CHECK(_pno_state, "pno_state is NULL", err);
+	/* may need to free legacy ssid_list */
+	if (_pno_state->pno_mode & DHD_PNO_LEGACY_MODE) {
+		_params = &_pno_state->pno_params_arr[INDEX_OF_LEGACY_PARAMS];
+		_dhd_pno_reinitialize_prof(dhd, _params, DHD_PNO_LEGACY_MODE);
+	}
 	if (_pno_state->pno_mode & DHD_PNO_BATCH_MODE) {
 		_params = &_pno_state->pno_params_arr[INDEX_OF_BATCH_PARAMS];
 		/* clear resource if the BATCH MODE is on */
-		_dhd_pno_reinitialize_prof(dhd, _params, DHD_PNO_BATCH_MODE);
+_		dhd_pno_reinitialize_prof(dhd, _params, DHD_PNO_BATCH_MODE);
 	}
 	cancel_work_sync(&_pno_state->work);
 	MFREE(dhd->osh, _pno_state, sizeof(dhd_pno_status_info_t));
