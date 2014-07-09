@@ -556,6 +556,11 @@
 /** third-party VID/PID combos **/
 /********************************/
 
+/*
+ * NovaTech product ids (FTDI_VID)
+ */
+#define FTDI_NT_ORIONLXM_PID	0x7c90	/* OrionLXm Substation Automation Platform */
+
 
 
 /*
