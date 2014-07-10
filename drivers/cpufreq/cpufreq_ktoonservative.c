@@ -33,14 +33,13 @@
 #define DEF_FREQUENCY_UP_THRESHOLD_HOTPLUG	(58)
 #define DEF_FREQUENCY_DOWN_THRESHOLD		(52)
 #define DEF_FREQUENCY_DOWN_THRESHOLD_HOTPLUG	(35)
-#define DEF_CPU_DOWN_BLOCK_CYCLES		(22)
 #define DEF_BOOST_CPU				(1000000)
 #define DEF_BOOST_CPU_TURN_ON_2ND_CORE		(1)
 #define DEF_BOOST_GPU				(450)
 #define DEF_BOOST_HOLD_CYCLES			(22)
 #define DEF_DISABLE_HOTPLUGGING			(0)
-#define DEF_UP_FREQ_THRESHOLD_HOTPLUG (700)
-#define DEF_DOWN_FREQ_THRESHOLD_HOTPLUG (500)
+#define DEF_UP_FREQ_THRESHOLD_HOTPLUG 		(1200000)
+#define DEF_DOWN_FREQ_THRESHOLD_HOTPLUG 	(500000)
 
 /*
  * The polling frequency of this governor depends on the capability of
@@ -56,8 +55,12 @@
 
 static unsigned int min_sampling_rate;
 static unsigned int stored_sampling_rate;
-static unsigned int Lcpu_down_block_cycles = 0;
-static unsigned int Lcpu_up_block_cycles = 0;
+
+static unsigned int Lblock_cycles_online = 0;
+static unsigned int Lblock_cycles_offline = 0;
+static unsigned int Lblock_cycles_raise = 0;
+static unsigned int Lblock_cycles_reduce = 0;
+
 static bool boostpulse_relayf = false;
 static int boost_hold_cycles_cnt = 0;
 static unsigned int boostpulse_relay_sr = 0;
@@ -111,7 +114,10 @@ static struct dbs_tuners {
 	unsigned int up_threshold_hotplug;
 	unsigned int down_threshold;
 	unsigned int down_threshold_hotplug;
-	unsigned int cpu_down_block_cycles;
+	unsigned int block_cycles_online;
+	unsigned int block_cycles_offline;
+	unsigned int block_cycles_raise;
+	unsigned int block_cycles_reduce;
 	unsigned int boost_cpu;
 	unsigned int boost_turn_on_2nd_core;
 	unsigned int boost_gpu;
@@ -127,7 +133,10 @@ static struct dbs_tuners {
 	.up_threshold_hotplug = DEF_FREQUENCY_UP_THRESHOLD_HOTPLUG,
 	.down_threshold = DEF_FREQUENCY_DOWN_THRESHOLD,
 	.down_threshold_hotplug = DEF_FREQUENCY_DOWN_THRESHOLD_HOTPLUG,
-	.cpu_down_block_cycles = DEF_CPU_DOWN_BLOCK_CYCLES,
+	.block_cycles_online=10,
+	.block_cycles_offline=25,
+	.block_cycles_raise=2,	
+	.block_cycles_reduce=3,
 	.boost_cpu = DEF_BOOST_CPU,
 	.boost_turn_on_2nd_core = DEF_BOOST_CPU_TURN_ON_2ND_CORE,
 	.boost_gpu = DEF_BOOST_GPU,
@@ -247,13 +256,16 @@ show_one(up_threshold, up_threshold);
 show_one(up_threshold_hotplug, up_threshold_hotplug);
 show_one(down_threshold, down_threshold);
 show_one(down_threshold_hotplug, down_threshold_hotplug);
-show_one(cpu_down_block_cycles, cpu_down_block_cycles);
 show_one(boost_turn_on_2nd_core, boost_turn_on_2nd_core);
 show_one(boost_gpu, boost_gpu);
 show_one(boost_hold_cycles, boost_hold_cycles);
 show_one(disable_hotplugging, disable_hotplugging);
 show_one(no_2nd_cpu_screen_off, no_2nd_cpu_screen_off);
 show_one(ignore_nice_load, ignore_nice);
+show_one(block_cycles_online, block_cycles_online);
+show_one(block_cycles_offline, block_cycles_offline);
+show_one(block_cycles_raise, block_cycles_raise);
+show_one(block_cycles_reduce, block_cycles_reduce);
 show_one(freq_step, freq_step);
 
 static ssize_t store_sampling_down_factor(struct kobject *a,
@@ -394,7 +406,7 @@ static ssize_t store_down_freq_threshold_hotplug(struct kobject *a, struct attri
 	return count;
 }
 
-static ssize_t store_cpu_down_block_cycles(struct kobject *a, struct attribute *b,
+static ssize_t store_block_cycles_online(struct kobject *a, struct attribute *b,
 				    const char *buf, size_t count)
 {
 	unsigned int input;
@@ -405,7 +417,52 @@ static ssize_t store_cpu_down_block_cycles(struct kobject *a, struct attribute *
 	if (input < 0)
 		return -EINVAL;
 
-	dbs_tuners_ins.cpu_down_block_cycles = input;
+	dbs_tuners_ins.block_cycles_online = input;
+	return count;
+}
+
+static ssize_t store_block_cycles_offline(struct kobject *a, struct attribute *b,
+				    const char *buf, size_t count)
+{
+	unsigned int input;
+	int ret;
+	ret = sscanf(buf, "%u", &input);
+
+	/* cannot be lower than 11 otherwise freq will not fall */
+	if (input < 0)
+		return -EINVAL;
+
+	dbs_tuners_ins.block_cycles_offline = input;
+	return count;
+}
+
+static ssize_t store_block_cycles_raise(struct kobject *a, struct attribute *b,
+				    const char *buf, size_t count)
+{
+	unsigned int input;
+	int ret;
+	ret = sscanf(buf, "%u", &input);
+
+	/* cannot be lower than 11 otherwise freq will not fall */
+	if (input < 0)
+		return -EINVAL;
+
+	dbs_tuners_ins.block_cycles_raise = input;
+	return count;
+}
+
+static ssize_t store_block_cycles_reduce(struct kobject *a, struct attribute *b,
+				    const char *buf, size_t count)
+{
+	unsigned int input;
+	int ret;
+	ret = sscanf(buf, "%u", &input);
+
+	/* cannot be lower than 11 otherwise freq will not fall */
+	if (input < 0)
+		return -EINVAL;
+
+	dbs_tuners_ins.block_cycles_reduce = input;
 	return count;
 }
 
@@ -553,7 +610,10 @@ define_one_global_rw(up_threshold);
 define_one_global_rw(up_threshold_hotplug);
 define_one_global_rw(down_threshold);
 define_one_global_rw(down_threshold_hotplug);
-define_one_global_rw(cpu_down_block_cycles);
+define_one_global_rw(block_cycles_online);
+define_one_global_rw(block_cycles_offline);
+define_one_global_rw(block_cycles_raise);
+define_one_global_rw(block_cycles_reduce);
 define_one_global_rw(boost_cpu);
 define_one_global_rw(boost_turn_on_2nd_core);
 define_one_global_rw(boost_gpu);
@@ -574,11 +634,14 @@ static struct attribute *dbs_attributes[] = {
 	&up_threshold_hotplug.attr,
 	&down_threshold.attr,
 	&down_threshold_hotplug.attr,
-	&cpu_down_block_cycles.attr,
 	&boost_cpu.attr,
 	&boost_turn_on_2nd_core.attr,
 	&boost_gpu.attr,
 	&boost_hold_cycles.attr,
+	&block_cycles_raise.attr,
+	&block_cycles_reduce.attr,
+	&block_cycles_online.attr,
+	&block_cycles_offline.attr,
 	&disable_hotplugging.attr,
 	&no_2nd_cpu_screen_off.attr,
 	&ignore_nice_load.attr,
@@ -694,47 +757,54 @@ static void dbs_check_cpu(struct cpu_dbs_info_s *this_dbs_info)
 	if (max_load > dbs_tuners_ins.up_threshold_hotplug && policy->cur > dbs_tuners_ins.up_freq_threshold_hotplug ) {
 		if (num_online_cpus() < 2 && policy->cur != policy->min)
 		{
-			if (Lcpu_up_block_cycles > dbs_tuners_ins.cpu_down_block_cycles && (dbs_tuners_ins.no_2nd_cpu_screen_off == 0 || (dbs_tuners_ins.no_2nd_cpu_screen_off == 1 && screen_is_on)))
+			Lblock_cycles_online ++;
+			if (Lblock_cycles_online > dbs_tuners_ins.block_cycles_online
+				&& (dbs_tuners_ins.no_2nd_cpu_screen_off == 0 || (dbs_tuners_ins.no_2nd_cpu_screen_off == 1 && screen_is_on)))
 			{
 				schedule_work_on(0, &hotplug_online_work);
-				Lcpu_up_block_cycles = 0;
+				Lblock_cycles_online  = 0;
+				Lblock_cycles_offline  = 0;
 			}
-			Lcpu_up_block_cycles++;
 		}
 	}
 
 	/* Check for frequency increase */
 	if (max_load > dbs_tuners_ins.up_threshold) {
-		this_dbs_info->down_skip = 0;
+		Lblock_cycles_raise++;
+		if ( Lblock_cycles_raise >= dbs_tuners_ins.block_cycles_raise)
+		 {
+			/* if we are already at full speed then break out early */
+			if (this_dbs_info->requested_freq == policy->max)
+				return;
 
-		/* if we are already at full speed then break out early */
-		if (this_dbs_info->requested_freq == policy->max)
-			return;
+			freq_target = (dbs_tuners_ins.freq_step * policy->max) / 100;
 
-		freq_target = (dbs_tuners_ins.freq_step * policy->max) / 100;
+			/* max freq cannot be less than 100. But who knows.... */
+			if (unlikely(freq_target == 0))
+				freq_target = 5;
 
-		/* max freq cannot be less than 100. But who knows.... */
-		if (unlikely(freq_target == 0))
-			freq_target = 5;
+			this_dbs_info->requested_freq += freq_target;
+			if (  this_dbs_info->requested_freq > policy->max) {
+				this_dbs_info->requested_freq = policy->max;
+			}
+			Lblock_cycles_raise = 0;
+			__cpufreq_driver_target(policy, this_dbs_info->requested_freq,
+				CPUFREQ_RELATION_H);
 
-		this_dbs_info->requested_freq += freq_target;
-		if (this_dbs_info->requested_freq > policy->max)
-			this_dbs_info->requested_freq = policy->max;
-
-		__cpufreq_driver_target(policy, this_dbs_info->requested_freq,
-			CPUFREQ_RELATION_H);
+		}
 		return;
 	}
 
 	if (max_load < dbs_tuners_ins.down_threshold_hotplug && !dbs_tuners_ins.disable_hotplugging && policy->cur < dbs_tuners_ins.down_freq_threshold_hotplug) {
 		if (num_online_cpus() > 1)
 		{
-			if (Lcpu_down_block_cycles > dbs_tuners_ins.cpu_down_block_cycles)
+			Lblock_cycles_offline ++;
+			if (Lblock_cycles_offline > dbs_tuners_ins.block_cycles_offline)
 			{
 				schedule_work_on(0, &hotplug_offline_work);
-				Lcpu_down_block_cycles = 0;
+                                Lblock_cycles_online  = 0;
+                                Lblock_cycles_offline = 0;
 			}
-			Lcpu_down_block_cycles++;
 		}
 	}
 	/*
@@ -743,21 +813,25 @@ static void dbs_check_cpu(struct cpu_dbs_info_s *this_dbs_info)
 	 * policy. To be safe, we focus 10 points under the threshold.
 	 */
 	if (max_load < (dbs_tuners_ins.down_threshold - 10)) {
-		freq_target = (dbs_tuners_ins.freq_step * policy->max) / 100;
+		Lblock_cycles_reduce++;
+		if ( Lblock_cycles_reduce > dbs_tuners_ins.block_cycles_reduce) 
+		{
+			freq_target = (dbs_tuners_ins.freq_step * policy->max) / 100;
 
-		this_dbs_info->requested_freq -= freq_target;
-		if (this_dbs_info->requested_freq < policy->min)
-			this_dbs_info->requested_freq = policy->min;
+			this_dbs_info->requested_freq -= freq_target;
+			if (this_dbs_info->requested_freq < policy->min)
+				this_dbs_info->requested_freq = policy->min;
 
-		/*
-		 * if we cannot reduce the frequency anymore, break out early
-		 */
-		if (policy->cur == policy->min)
+			/*
+			 * if we cannot reduce the frequency anymore, break out early
+			 */
+			if (policy->cur == policy->min)
+				return;
+			Lblock_cycles_reduce=0;
+			__cpufreq_driver_target(policy, this_dbs_info->requested_freq,
+					CPUFREQ_RELATION_H);
 			return;
-
-		__cpufreq_driver_target(policy, this_dbs_info->requested_freq,
-				CPUFREQ_RELATION_H);
-		return;
+		}
 	}
 }
 
