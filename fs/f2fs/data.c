@@ -926,7 +926,7 @@ static void f2fs_write_failed(struct address_space *mapping, loff_t to)
 	struct inode *inode = mapping->host;
 
 	if (to > inode->i_size) {
-		truncate_pagecache(inode, 0,  inode->i_size);
+		truncate_pagecache(inode, 0, inode->i_size);
 		truncate_blocks(inode, inode->i_size);
 	}
 }
@@ -1062,14 +1062,16 @@ static int check_direct_IO(struct inode *inode, int rw,
 	if (offset & blocksize_mask)
 		return -EINVAL;
 
-	for (i = 0; i < nr_segs; i++)
-		if (iov[i].iov_len & blocksize_mask)
-			return -EINVAL;
+       for (i = 0; i < nr_segs; i++)
+               if (iov[i].iov_len & blocksize_mask)
+                       return -EINVAL;
+
 	return 0;
 }
 
 static ssize_t f2fs_direct_IO(int rw, struct kiocb *iocb,
-		const struct iovec *iov, loff_t offset, unsigned long nr_segs)
+				const struct iovec *iov, loff_t offset,
+				unsigned long nr_segs)
 {
 	struct file *file = iocb->ki_filp;
 	struct address_space *mapping = file->f_mapping;

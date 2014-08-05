@@ -340,9 +340,8 @@ static struct page *init_inode_metadata(struct inode *inode,
 	struct f2fs_sb_info *sbi = F2FS_SB(dir->i_sb);
 	struct page *page;
 	int err;
-	
-	if (is_inode_flag_set(F2FS_I(inode), FI_NEW_INODE) &&
-			inode->i_nlink) {
+
+	if (is_inode_flag_set(F2FS_I(inode), FI_NEW_INODE)) {
 		page = new_inode_page(inode);
 		if (IS_ERR(page))
 			return page;
