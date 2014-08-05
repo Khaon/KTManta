@@ -1880,7 +1880,7 @@ int dhd_pno_deinit(dhd_pub_t *dhd)
 	if (_pno_state->pno_mode & DHD_PNO_BATCH_MODE) {
 		_params = &_pno_state->pno_params_arr[INDEX_OF_BATCH_PARAMS];
 		/* clear resource if the BATCH MODE is on */
-_		dhd_pno_reinitialize_prof(dhd, _params, DHD_PNO_BATCH_MODE);
+		_dhd_pno_reinitialize_prof(dhd, _params, DHD_PNO_BATCH_MODE);
 	}
 	cancel_work_sync(&_pno_state->work);
 	MFREE(dhd->osh, _pno_state, sizeof(dhd_pno_status_info_t));
